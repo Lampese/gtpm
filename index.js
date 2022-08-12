@@ -1,4 +1,15 @@
 #!/usr/bin/env node
+const helper=`gtpm <command>
+
+Usage:
+
+gtpm setsrc <src>   init the project or set src to <src>
+gtpm install        install all the dependencies in your project
+gtpm install <foo>  add the <foo> dependency to your project
+gtpm unstall <foo>  remove <foo> to your project
+gtpm help           get help
+gtpm config set <url>  set source to gtpm
+`
 const { countReset } = require('console');
 const fs=require('fs');
 const testmode=true;
@@ -24,6 +35,12 @@ else if(process.argv[pos]=="setsrc"){
     context.src=SRC;
     fs.writeFileSync("gtpkg.json",JSON.stringify(context));
     process.exit(0);
+}else if(process.argv[pos]=="help"){
+    console.log(helper);
+    process.exit(0);
+}else if(process.argv[pos]!="config"){
+    console.log(helper);
+    process.exit(0);
 }
 function mvpackage(src,name){
     fs.mkdirSync(`./${src}/${name}`);
@@ -39,25 +56,25 @@ function mvpackage(src,name){
 function createQueue(){
     let queue=[]
     const enQueue=(data)=>{
-      if(data==null)return;
-      queue.push(data);
+        if(data==null)return;
+        queue.push(data);
     }
     const deQueue=()=>{
-      if(queue.length===0)return;
-      const data=queue.shift();
-      return data;
+        if(queue.length===0)return;
+        const data=queue.shift();
+        return data;  
     }
     const empty=()=>{
         return queue.length===0;
     }
     const getQueue=()=>{
-      return Array.from(queue);
+        return Array.from(queue);
     }
     return{
-      enQueue,
-      deQueue,
-      getQueue,
-      empty
+        enQueue,
+        deQueue,
+        getQueue,
+        empty
     }
 }
 if (require.main === module) {
@@ -68,10 +85,20 @@ if (require.main === module) {
         fs.accessSync("gtpkg.json",fs.constants.F_OK);
     }catch(err){
         console.log("Unable to find gtpkg.json, please create using setsrc.")
+        return;
     }
     let context=JSON.parse(fs.readFileSync("gtpkg.json").toString());
     if(mode==INSTALL){
-        let packages=process.argv.slice(pos+1);
+        let v=0;
+        let packages=[];
+        if(process.argv[pos+1]==undefined){
+            let backcontext=JSON.parse(fs.readFileSync('package.json').toString());
+            v=1;
+            for(let i in backcontext.dependencies)
+                if(i.includes("-gt")&&(!context.packages.includes(i)))
+                    packages.push(i);
+        }
+        if(v=0)packages=process.argv.slice(pos+1);
         let pack=[],vis={};
         for(let i in packages){
             if(vis[packages[i]])continue;
@@ -84,7 +111,7 @@ if (require.main === module) {
                 vis[u]=1;
                 let back=JSON.parse(fs.readFileSync(`./node_modules/${u}/package.json`).toString());
                 for(let j in back.dependencies){
-                    if(j.includes("-gt")){
+                    if(j.includes("-gt")&&(!context.packages.includes(j))){
                         console.log(`It has been found that ${j} depends on ${u} and joins the installation queue.`);
                         q.enQueue(j);
                         pack.push(j);
