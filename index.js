@@ -23,8 +23,42 @@ else if(process.argv[pos]=="setsrc"){
     }
     context.src=SRC;
     fs.writeFileSync("gtpkg.json",JSON.stringify(context));
-    console.log("done.");
     process.exit(0);
+}
+function mvpackage(src,name){
+    fs.mkdirSync(`./${src}/${name}`);
+    let dir=fs.readdirSync(`./node_modules/${name}/`);
+    for(let j in dir){
+        if(dir[j].includes('.json'))continue;
+        if(dir[j].includes('.ts')||dir[j].includes('.js')){
+            fs.renameSync(`./node_modules/${name}/${dir[j]}`,`./${src}/${name}/${dir[j]}`);
+            console.log(`moving ${dir[j]} (from package ${name}).`);
+        }
+    }
+}
+function createQueue(){
+    let queue=[]
+    const enQueue=(data)=>{
+      if(data==null)return;
+      queue.push(data);
+    }
+    const deQueue=()=>{
+      if(queue.length===0)return;
+      const data=queue.shift();
+      return data;
+    }
+    const empty=()=>{
+        return queue.length===0;
+    }
+    const getQueue=()=>{
+      return Array.from(queue);
+    }
+    return{
+      enQueue,
+      deQueue,
+      getQueue,
+      empty
+    }
 }
 if (require.main === module) {
   require('./lib/cli.js')(process,()=>{
@@ -38,18 +72,33 @@ if (require.main === module) {
     let context=JSON.parse(fs.readFileSync("gtpkg.json").toString());
     if(mode==INSTALL){
         let packages=process.argv.slice(pos+1);
+        let pack=[],vis={};
         for(let i in packages){
+            if(vis[packages[i]])continue;
             if(packages[i].includes('registry')||packages[i].includes('http'))continue;
-            fs.mkdirSync(`./${context.src}/${packages[i]}`);
-            context.packages.push(packages[i]);
-            let dir=fs.readdirSync(`./node_modules/${packages[i]}/`);
-            for(let j in dir){
-                if(dir[j].includes('.json'))continue;
-                if(dir[j].includes('.ts')||dir[j].includes('.js')){
-                    fs.renameSync(`./node_modules/${packages[i]}/${dir[j]}`,`./${context.src}/${packages[i]}/${dir[j]}`);
-                    console.log(`moving ${dir[j]} (from package ${packages[i]}).`);
+            pack.push(packages[i]);
+            let q=createQueue();
+            q.enQueue(packages[i]);
+            while(!q.empty()){
+                let u=q.deQueue();
+                vis[u]=1;
+                let back=JSON.parse(fs.readFileSync(`./node_modules/${u}/package.json`).toString());
+                for(let j in back.dependencies){
+                    if(j.includes("-gt")){
+                        console.log(`It has been found that ${j} depends on ${u} and joins the installation queue.`);
+                        q.enQueue(j);
+                        pack.push(j);
+                    }
                 }
             }
+        }
+        for(let i in pack){
+            if(context.packages.includes(pack[i])){
+                console.log(`The package ${pack[i]} was installed.`)
+                continue;
+            }
+            context.packages.push(pack[i]);
+            mvpackage(context.src,pack[i]);
         }
         fs.writeFileSync("gtpkg.json",JSON.stringify(context));
     }else{
